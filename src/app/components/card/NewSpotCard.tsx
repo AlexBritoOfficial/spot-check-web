@@ -5,13 +5,14 @@ import CloseButton from "../button/closebutton/CloseButton.component";
 import StarRating from "../starrating/StarRating";
 import styles from "./NewSpotCard.module.css";
 import { Difficulty, Feature, Spot, SpotType } from "@/types/spot";
+import { NewSpot } from "@/app/lib/spotSchema";
 import { useUploadPhoto } from "@/app/lib/useUploadPhoto";
 import { SubmitEvent } from "react";
 
 interface NewSpotCardProps {
   onClose: () => void;
   location: { lat: number; lng: number };
-  onSave: (spot: Omit<Spot, "id">) => void;
+  onSave: (spot: NewSpot) => void;
   isPending: boolean;
   error: Error | null;
   initialSpot?: Spot;
@@ -33,6 +34,7 @@ function NewSpotCard({
     const formData = new FormData(e.currentTarget);
 
     const name = formData.get("name") as string;
+    const city = formData.get("city") as string;
     const spotType = formData.get("spotType") as SpotType;
     const features = formData.getAll("spotFeature") as Feature[];
     const difficulty = formData.get("difficulty") as Difficulty;
@@ -51,7 +53,7 @@ function NewSpotCard({
 
     onSave({
       name,
-      city: initialSpot?.city ?? "",
+      city,
       spotType,
       description,
       features,
@@ -62,7 +64,6 @@ function NewSpotCard({
       latLng: location,
       photo,
       status: initialSpot?.status ?? "active",
-      createdAt: initialSpot?.createdAt ?? new Date().toISOString(),
     });
   }
 
@@ -125,6 +126,20 @@ function NewSpotCard({
                 defaultValue={initialSpot?.name}
                 className={styles.spotNameInput}
                 aria-label="Spot Name"
+                required
+              />
+            </div>
+
+            {/* Field: City */}
+            <h5 className={styles.spotName}>City</h5>
+            <div className={styles.spotNameDiv}>
+              <input
+                name="city"
+                placeholder="e.g Boston"
+                type="text"
+                defaultValue={initialSpot?.city}
+                className={styles.spotNameInput}
+                aria-label="City"
                 required
               />
             </div>
@@ -260,7 +275,7 @@ function NewSpotCard({
               className={styles.textarea}
               name="description"
               rows={3}
-              defaultValue={initialSpot?.description}
+              defaultValue={initialSpot?.description ?? undefined}
               placeholder="What makes this spot worth skating?"
             ></textarea>
 

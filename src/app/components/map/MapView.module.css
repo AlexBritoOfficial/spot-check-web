@@ -60,6 +60,18 @@
   box-shadow: 0 0 0 6px oklch(0.78 0.19 85 / 0.25);
 }
 
+/* Owned-by-me spots get their own color so they read as "yours" on the
+   map at a glance, distinct from both the default pin and the gold
+   selected state. */
+.pinShapeOwned {
+  background: oklch(0.72 0.14 220);
+}
+
+.pinShapeOwned.pinShapeSelected {
+  background: oklch(0.72 0.14 220);
+  box-shadow: 0 0 0 6px oklch(0.72 0.14 220 / 0.25);
+}
+
 .pinLabel {
   position: absolute;
   bottom: calc(100% + 8px);

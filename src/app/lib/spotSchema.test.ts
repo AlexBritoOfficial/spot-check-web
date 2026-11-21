@@ -12,7 +12,6 @@ const validSpot = {
   rating: 4,
   latLng: { lat: 39.9526, lng: -75.1652 },
   status: "active",
-  createdAt: new Date().toISOString(),
 };
 
 describe("spotSchema", () => {
@@ -27,12 +26,29 @@ describe("spotSchema", () => {
     if (result.success) {
       expect(result.data.description).toBeUndefined();
       expect(result.data.photo).toBeUndefined();
-      expect(result.data.ownerId).toBeUndefined();
+    }
+  });
+
+  it("strips ownerId/createdAt rather than accepting them from a client", () => {
+    const result = spotSchema.safeParse({
+      ...validSpot,
+      ownerId: "00000000-0000-0000-0000-000000000000",
+      createdAt: "2020-01-01T00:00:00.000Z",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).not.toHaveProperty("ownerId");
+      expect(result.data).not.toHaveProperty("createdAt");
     }
   });
 
   it("rejects an empty name", () => {
     const result = spotSchema.safeParse({ ...validSpot, name: "" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty city", () => {
+    const result = spotSchema.safeParse({ ...validSpot, city: "" });
     expect(result.success).toBe(false);
   });
 

@@ -1,4 +1,5 @@
 import { Spot } from "@/types/spot";
+import { NewSpot } from "@/app/lib/spotSchema";
 
 export interface NearbyParams {
   lat: number;
@@ -30,7 +31,7 @@ function toSpots(json: unknown): Spot[] {
   return json as Spot[];
 }
 
-export async function createSpot(spot: Omit<Spot, "id">): Promise<Spot> {
+export async function createSpot(spot: NewSpot): Promise<Spot> {
   const response = await fetch("/api/spots", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -44,10 +45,7 @@ export async function createSpot(spot: Omit<Spot, "id">): Promise<Spot> {
   return response.json();
 }
 
-export async function updateSpot(
-  id: string,
-  spot: Omit<Spot, "id">,
-): Promise<Spot> {
+export async function updateSpot(id: string, spot: NewSpot): Promise<Spot> {
   const response = await fetch(`/api/spots/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

@@ -1,46 +1,10 @@
-import { prisma } from "@/app/lib/prisma";
+import { createClient, withSessionCookies } from "@/lib/supabase/server";
 import { nearbySpotsQuerySchema } from "@/app/lib/nearbySpotsQuerySchema";
 import { spotSchema } from "@/app/lib/spotSchema";
-import {
-  Difficulty,
-  Feature,
-  SpotType,
-  Status,
-} from "@/generated/prisma/enums";
-import { Spot } from "@/types/spot";
+import { reshapeNearbySpot, reshapeSpot } from "./reshape";
 import { NextRequest, NextResponse } from "next/server";
 
 const DEFAULT_RADIUS_METERS = 8000;
-
-type RawSpotRow = {
-  id: number;
-  spotId: string;
-  name: string;
-  city: string;
-  spotType: SpotType;
-  description: string;
-  features: Feature[];
-  difficulty: Difficulty;
-  isSkateable: boolean;
-  isPublic: boolean;
-  rating: number;
-  lng: number;
-  lat: number;
-  photo: string;
-  status: Status;
-  createdAt: string;
-};
-
-type RawNearbySpotRow = RawSpotRow & { distanceMeters: number };
-
-function reshapeSpot({
-  spotId,
-  lat,
-  lng,
-  ...rest
-}: RawSpotRow | RawNearbySpotRow): Spot {
-  return { ...rest, id: spotId, latLng: { lat, lng } };
-}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -58,57 +22,35 @@ export async function GET(request: NextRequest) {
   }
 
   const { lat, lng, radius } = result.data;
+  const { supabase, cookieResponse } = createClient(request);
 
   try {
+    // RLS (is_public or owner_id = auth.uid()) filters both branches below
+    // automatically — a signed-out or non-owner caller never sees a private
+    // spot, with no isPublic check needed in this route.
     if (lat !== undefined && lng !== undefined) {
-      const rawSpots = await prisma.$queryRaw<RawNearbySpotRow[]>`
-        SELECT  "id",
-                "name",
-                "spotId",
-                "city",
-                "spotType",
-                "description",
-                "features"::text[] AS features,
-                "difficulty",
-                "isSkateable",
-                "isPublic",
-                "rating",
-                ST_X("latLng"::geometry) AS lng,
-                ST_Y("latLng"::geometry) AS lat,
-                "photo",
-                "status",
-                "createdAt",
-                ST_Distance("latLng", ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography) AS "distanceMeters"
-        FROM "Spot"
-        WHERE ST_DWithin("latLng", ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography, ${radius ?? DEFAULT_RADIUS_METERS})
-        ORDER BY "distanceMeters" ASC
-      `;
+      const { data, error } = await supabase.rpc("spots_nearby", {
+        p_lat: lat,
+        p_lng: lng,
+        p_radius_meters: radius ?? DEFAULT_RADIUS_METERS,
+      });
 
-      return NextResponse.json(rawSpots.map(reshapeSpot));
+      if (error) throw error;
+
+      return withSessionCookies(
+        NextResponse.json((data ?? []).map(reshapeNearbySpot)),
+        cookieResponse,
+      );
     }
 
-    const rawSpots = await prisma.$queryRaw<RawSpotRow[]>`
-        SELECT  "id",
-                "name",
-                "spotId",
-                "city",
-                "spotType",
-                "description",
-                "features"::text[] AS features,
-                "difficulty",
-                "isSkateable",
-                "isPublic",
-                "rating",
-                ST_X("latLng"::geometry) AS lng,
-                ST_Y("latLng"::geometry) AS lat,
-                "photo",
-                "status",
-                "createdAt"
+    const { data, error } = await supabase.from("spots").select();
 
-        FROM "Spot"
-    `;
+    if (error) throw error;
 
-    return NextResponse.json(rawSpots.map(reshapeSpot));
+    return withSessionCookies(
+      NextResponse.json((data ?? []).map(reshapeSpot)),
+      cookieResponse,
+    );
   } catch (error) {
     console.error(error);
     return NextResponse.json(
@@ -118,7 +60,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   let body: unknown;
   try {
     body = await request.json();
@@ -136,26 +78,45 @@ export async function POST(request: Request) {
   }
 
   const { latLng, ...rest } = result.data;
+  const { supabase, cookieResponse } = createClient(request);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  try {
-    const spot = await prisma.spot.create({
-      data: {
-        ...rest,
-      },
-    });
+  // owner_id always comes from the session, never the request body — a
+  // signed-out caller (user === null) creates an ownerless spot, matching
+  // the anon insert policy's `owner_id is null` check.
+  const { data: spot, error } = await supabase
+    .from("spots")
+    .insert({
+      name: rest.name,
+      city: rest.city,
+      spot_type: rest.spotType,
+      description: rest.description,
+      features: rest.features,
+      difficulty: rest.difficulty,
+      is_skateable: rest.isSkateable,
+      is_public: rest.isPublic,
+      rating: rest.rating,
+      photo: rest.photo,
+      status: rest.status,
+      lat: latLng.lat,
+      lng: latLng.lng,
+      owner_id: user?.id ?? null,
+    })
+    .select()
+    .single();
 
-    await prisma.$executeRaw`UPDATE "Spot"
-      SET "latLng" = ST_SetSRID(ST_MakePoint(${latLng.lng}, ${latLng.lat}), 4326) WHERE "id" = ${spot.id}`;
-
-    const { spotId, ...spotFields } = spot;
-    const createdSpot = { ...spotFields, id: spotId, latLng };
-
-    return NextResponse.json(createdSpot, { status: 201 });
-  } catch (error) {
+  if (error) {
     console.error(error);
     return NextResponse.json(
       { error: "Failed to create spot" },
       { status: 500 },
     );
   }
+
+  return withSessionCookies(
+    NextResponse.json(reshapeSpot(spot), { status: 201 }),
+    cookieResponse,
+  );
 }

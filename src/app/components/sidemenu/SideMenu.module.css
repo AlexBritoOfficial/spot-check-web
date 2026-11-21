@@ -185,3 +185,8 @@
   font-family: var(--font-archivo-black);
   cursor: pointer;
 }
+
+.errorMessage {
+  color: var(--color-danger);
+  font-size: 13px;
+}

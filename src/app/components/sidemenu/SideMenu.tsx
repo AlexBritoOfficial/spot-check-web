@@ -4,28 +4,29 @@ import { SubmitEvent } from "react";
 import styles from "./SideMenu.module.css";
 import CloseButton from "../button/closebutton/CloseButton.component";
 import Button from "../button/Button.component";
+import { useSession } from "@/app/lib/useSession";
+import { useSignIn } from "@/app/lib/useSignIn";
+import { useSignOut } from "@/app/lib/useSignOut";
 
 interface SideMenuProps {
   isOpen: boolean;
   onClose: () => void;
-  signedIn: boolean;
-  onSignIn: () => void;
-  onSignOut: () => void;
   onOpenSignUp: () => void;
 }
 
-function SideMenu({
-  isOpen,
-  onClose,
-  signedIn,
-  onSignIn,
-  onSignOut,
-  onOpenSignUp,
-}: SideMenuProps) {
-  // Hanndle the sign-in event
+function SideMenu({ isOpen, onClose, onOpenSignUp }: SideMenuProps) {
+  const { data: session } = useSession();
+  const signIn = useSignIn();
+  const signOut = useSignOut();
+  const signedIn = session != null;
+
   function handleSignIn(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
-    onSignIn();
+    const formData = new FormData(e.currentTarget);
+    signIn.mutate({
+      email: formData.get("email") as string,
+      password: formData.get("password") as string,
+    });
   }
 
   return (
@@ -41,10 +42,16 @@ function SideMenu({
       {signedIn ? (
         <div className={styles.body}>
           <div className={styles.profileRow}>
-            <div className={styles.avatar}>R</div>
+            <div className={styles.avatar}>
+              {(session.username ?? session.email ?? "?").charAt(0).toUpperCase()}
+            </div>
             <div>
-              <div className={styles.name}>Rider Nguyen</div>
-              <div className={styles.handle}>@rider.nguyen</div>
+              <div className={styles.name}>
+                {session.username ?? session.email}
+              </div>
+              {session.username && (
+                <div className={styles.handle}>@{session.username}</div>
+              )}
             </div>
           </div>
 
@@ -55,9 +62,10 @@ function SideMenu({
             <button className={styles.navItem}>Settings</button>
             <button
               className={`${styles.navItem} ${styles.signOut}`}
-              onClick={onSignOut}
+              onClick={() => signOut.mutate()}
+              disabled={signOut.isPending}
             >
-              Sign out
+              {signOut.isPending ? "Signing out..." : "Sign out"}
             </button>
           </div>
         </div>
@@ -73,9 +81,11 @@ function SideMenu({
             </label>
             <input
               id="signin-email"
+              name="email"
               type="email"
               placeholder="you@example.com"
               className={styles.input}
+              required
             />
           </div>
 
@@ -85,13 +95,23 @@ function SideMenu({
             </label>
             <input
               id="signin-password"
+              name="password"
               type="password"
               placeholder="••••••••"
               className={styles.input}
+              required
             />
           </div>
 
-          <Button label="Sign in" variant="primary" type="submit" />
+          {signIn.error && (
+            <p className={styles.errorMessage}>{signIn.error.message}</p>
+          )}
+
+          <Button
+            label={signIn.isPending ? "Signing in..." : "Sign in"}
+            variant="primary"
+            type="submit"
+          />
 
           <div className={styles.divider}>
             <span className={styles.dividerLine} />

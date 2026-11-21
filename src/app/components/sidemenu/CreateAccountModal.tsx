@@ -4,6 +4,7 @@ import { SubmitEvent } from "react";
 import styles from "./CreateAccountModal.module.css";
 import CloseButton from "../button/closebutton/CloseButton.component";
 import Button from "../button/Button.component";
+import { useSignUp } from "@/app/lib/useSignUp";
 
 interface CreateAccountModalProps {
   isOpen: boolean;
@@ -18,11 +19,23 @@ function CreateAccountModal({
   onBackToSignIn,
   onCreateAccount,
 }: CreateAccountModalProps) {
+  const signUp = useSignUp();
+
   if (!isOpen) return null;
 
   function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
-    onCreateAccount();
+    const formData = new FormData(e.currentTarget);
+
+    signUp.mutate(
+      {
+        username: formData.get("username") as string,
+        email: formData.get("email") as string,
+        password: formData.get("password") as string,
+        homeCity: formData.get("homeCity") as string,
+      },
+      { onSuccess: onCreateAccount },
+    );
   }
 
   return (
@@ -45,9 +58,11 @@ function CreateAccountModal({
             </label>
             <input
               id="signup-username"
+              name="username"
               type="text"
               placeholder="e.g. rider.nguyen"
               className={styles.input}
+              required
             />
           </div>
 
@@ -57,9 +72,11 @@ function CreateAccountModal({
             </label>
             <input
               id="signup-email"
+              name="email"
               type="email"
               placeholder="you@example.com"
               className={styles.input}
+              required
             />
           </div>
 
@@ -69,9 +86,11 @@ function CreateAccountModal({
             </label>
             <input
               id="signup-password"
+              name="password"
               type="password"
               placeholder="••••••••"
               className={styles.input}
+              required
             />
           </div>
 
@@ -81,13 +100,22 @@ function CreateAccountModal({
             </label>
             <input
               id="signup-city"
+              name="homeCity"
               type="text"
               placeholder="e.g. Portland, OR"
               className={styles.input}
             />
           </div>
 
-          <Button label="Create account" variant="primary" type="submit" />
+          {signUp.error && (
+            <p className={styles.errorMessage}>{signUp.error.message}</p>
+          )}
+
+          <Button
+            label={signUp.isPending ? "Creating account..." : "Create account"}
+            variant="primary"
+            type="submit"
+          />
 
           <p className={styles.switchText}>
             Already have an account?{" "}

@@ -1,11 +1,11 @@
-import { prisma } from "@/app/lib/prisma";
+import { createClient, withSessionCookies } from "@/lib/supabase/server";
 import { spotSchema } from "@/app/lib/spotSchema";
-import { Prisma } from "@/generated/prisma/client";
-import { NextResponse } from "next/server";
+import { reshapeSpot } from "../reshape";
+import { NextRequest, NextResponse } from "next/server";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-export async function PATCH(request: Request, { params }: RouteParams) {
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
   let body: unknown;
@@ -25,57 +25,72 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   }
 
   const { latLng, ...rest } = result.data;
+  const { supabase, cookieResponse } = createClient(request);
 
-  try {
-    const spot = await prisma.spot.update({
-      where: { spotId: id },
-      data: {
-        ...rest,
-      },
-    });
+  // rating/status are deliberately not sent: the column-level GRANT in
+  // 20261118155807_rls.sql only lets `authenticated` write the columns
+  // listed below. Including rating or status here would fail the whole
+  // update with a column-permission error, not silently ignore them.
+  const { data: spot, error } = await supabase
+    .from("spots")
+    .update({
+      name: rest.name,
+      city: rest.city,
+      spot_type: rest.spotType,
+      description: rest.description,
+      features: rest.features,
+      difficulty: rest.difficulty,
+      is_skateable: rest.isSkateable,
+      is_public: rest.isPublic,
+      photo: rest.photo,
+      lat: latLng.lat,
+      lng: latLng.lng,
+    })
+    .eq("id", id)
+    .select()
+    .maybeSingle();
 
-    await prisma.$executeRaw`UPDATE "Spot"
-      SET "latLng" = ST_SetSRID(ST_MakePoint(${latLng.lng}, ${latLng.lat}), 4326) WHERE "id" = ${spot.id}`;
-
-    const { spotId, ...spotFields } = spot;
-    const updatedSpot = { ...spotFields, id: spotId, latLng };
-
-    return NextResponse.json(updatedSpot);
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2025"
-    ) {
-      return NextResponse.json({ error: "Spot not found" }, { status: 404 });
-    }
-
+  if (error) {
     console.error(error);
     return NextResponse.json(
       { error: "Failed to update spot" },
       { status: 500 },
     );
   }
+
+  // RLS silently returns zero rows rather than throwing — a non-owner's
+  // update and an update to a nonexistent id both land here. Collapsed
+  // into one 404 on purpose, so a non-owner can't use the response to
+  // probe which spot ids exist.
+  if (!spot) {
+    return NextResponse.json({ error: "Spot not found" }, { status: 404 });
+  }
+
+  return withSessionCookies(NextResponse.json(reshapeSpot(spot)), cookieResponse);
 }
 
-export async function DELETE(_request: Request, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
+  const { supabase, cookieResponse } = createClient(request);
 
-  try {
-    await prisma.spot.delete({ where: { spotId: id } });
+  const { data: spot, error } = await supabase
+    .from("spots")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
 
-    return new NextResponse(null, { status: 204 });
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2025"
-    ) {
-      return NextResponse.json({ error: "Spot not found" }, { status: 404 });
-    }
-
+  if (error) {
     console.error(error);
     return NextResponse.json(
       { error: "Failed to delete spot" },
       { status: 500 },
     );
   }
+
+  if (!spot) {
+    return NextResponse.json({ error: "Spot not found" }, { status: 404 });
+  }
+
+  return withSessionCookies(new NextResponse(null, { status: 204 }), cookieResponse);
 }

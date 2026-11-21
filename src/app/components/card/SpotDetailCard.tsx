@@ -11,6 +11,7 @@ const METERS_PER_MILE = 1609.344;
 
 interface SpotDetailCardProps {
   spot: Spot;
+  isOwner: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -24,7 +25,7 @@ function openInMaps(spot: Spot) {
   );
 }
 
-function SpotDetailCard({ spot, onEdit, onDelete }: SpotDetailCardProps) {
+function SpotDetailCard({ spot, isOwner, onEdit, onDelete }: SpotDetailCardProps) {
   return (
     <div className={styles.root}>
       {/* Drag handle: phone-only visual, signals this is a sheet you can
@@ -64,14 +65,23 @@ function SpotDetailCard({ spot, onEdit, onDelete }: SpotDetailCardProps) {
             onClick={() => openInMaps(spot)}
           />
           <div className={styles.secondaryActionRow}>
-            <Button label="Edit" variant="outline" grow={1} onClick={onEdit} />
+            {isOwner && (
+              <Button
+                label="Edit"
+                variant="outline"
+                grow={1}
+                onClick={onEdit}
+              />
+            )}
             <Button label="Reviews" variant="outline" grow={1} />
-            <Button
-              label="Delete"
-              variant="danger"
-              grow={1}
-              onClick={onDelete}
-            />
+            {isOwner && (
+              <Button
+                label="Delete"
+                variant="danger"
+                grow={1}
+                onClick={onDelete}
+              />
+            )}
           </div>
         </div>
       </div>

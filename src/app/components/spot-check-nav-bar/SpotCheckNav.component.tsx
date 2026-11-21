@@ -7,15 +7,16 @@ import SearchBox from "../searchbox/SearchBox.component";
 import Button from "../button/Button.component";
 import SideMenu from "../sidemenu/SideMenu";
 import CreateAccountModal from "../sidemenu/CreateAccountModal";
+import { useSession } from "@/app/lib/useSession";
 
 interface SpotCheckNavProps {
   onLocationFound: (location: { lat: number; lng: number }) => void;
 }
 
 export default function SpotCheckNav({ onLocationFound }: SpotCheckNavProps) {
+  const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
-  const [signedIn, setSignedIn] = useState(false);
 
   function openSignUp() {
     setShowSignUp(true);
@@ -29,12 +30,6 @@ export default function SpotCheckNav({ onLocationFound }: SpotCheckNavProps) {
 
   function completeSignUp() {
     setShowSignUp(false);
-    setSignedIn(true);
-  }
-
-  function signOut() {
-    setSignedIn(false);
-    setMenuOpen(false);
   }
 
   return (
@@ -53,7 +48,7 @@ export default function SpotCheckNav({ onLocationFound }: SpotCheckNavProps) {
           onClick={() => setMenuOpen(true)}
           aria-label="Account menu"
         >
-          {signedIn ? "U" : ""}
+          {session?.username?.charAt(0).toUpperCase() ?? ""}
         </button>
         <SearchBox onLocationFound={onLocationFound} />
         <Button
@@ -66,9 +61,6 @@ export default function SpotCheckNav({ onLocationFound }: SpotCheckNavProps) {
       <SideMenu
         isOpen={menuOpen}
         onClose={() => setMenuOpen(false)}
-        signedIn={signedIn}
-        onSignIn={() => setSignedIn(true)}
-        onSignOut={signOut}
         onOpenSignUp={openSignUp}
       />
 

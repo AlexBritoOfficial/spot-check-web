@@ -19,6 +19,8 @@ import { useCreateSpot } from "@/app/lib/useCreateSpot";
 import { useUpdateSpot } from "@/app/lib/useUpdateSpot";
 import { useDeleteSpot } from "@/app/lib/useDeleteSpot";
 import { useGeolocation } from "@/app/lib/useGeolocation";
+import { useSession } from "@/app/lib/useSession";
+import { NewSpot } from "@/app/lib/spotSchema";
 import styles from "./MapView.module.css";
 
 const DEFAULT_CITY = { lat: 42.361145, lng: -71.057083 };
@@ -34,16 +36,22 @@ const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 // like the Prisma client since it's just a copy of a node_modules file.
 setWorkerUrl("/maplibre-gl-worker.mjs");
 
-function createPinElement(selected: boolean, label?: string): HTMLDivElement {
+function createPinElement(
+  selected: boolean,
+  owned: boolean,
+  label?: string,
+): HTMLDivElement {
   const wrapper = document.createElement("div");
   wrapper.className = selected
     ? `${styles.pinWrapper} ${styles.pinWrapperSelected}`
     : styles.pinWrapper;
 
+  const shapeClasses = [styles.pinShape];
+  if (selected) shapeClasses.push(styles.pinShapeSelected);
+  if (owned) shapeClasses.push(styles.pinShapeOwned);
+
   const shape = document.createElement("div");
-  shape.className = selected
-    ? `${styles.pinShape} ${styles.pinShapeSelected}`
-    : styles.pinShape;
+  shape.className = shapeClasses.join(" ");
   wrapper.appendChild(shape);
 
   if (label) {
@@ -80,6 +88,7 @@ interface MapViewProps {
 export default function MapView({ searchedLocation }: MapViewProps) {
   const { coords, status: geoStatus } = useGeolocation();
   const effectiveLocation = searchedLocation ?? coords ?? DEFAULT_CITY;
+  const { data: session } = useSession();
   const {
     data: spots,
     isLoading,
@@ -131,7 +140,7 @@ export default function MapView({ searchedLocation }: MapViewProps) {
     setShowDeleteConfirm(false);
   }
 
-  function handleSaveSpot(newSpot: Omit<Spot, "id">) {
+  function handleSaveSpot(newSpot: NewSpot) {
     createSpot(newSpot, {
       onSuccess: () => {
         setShowNewSpotCard(false);
@@ -140,7 +149,7 @@ export default function MapView({ searchedLocation }: MapViewProps) {
     });
   }
 
-  function handleEditSpot(updatedSpot: Omit<Spot, "id">) {
+  function handleEditSpot(updatedSpot: NewSpot) {
     if (!spot) return;
     updateSpot(
       { id: spot.id, spot: updatedSpot },
@@ -224,7 +233,8 @@ export default function MapView({ searchedLocation }: MapViewProps) {
     spotMarkersRef.current.forEach((marker) => marker.remove());
     spotMarkersRef.current = spotsFiltered.map((s) => {
       const selected = showSpotDetailCard && spot?.id === s.id;
-      const el = createPinElement(selected, selected ? s.name : undefined);
+      const owned = session != null && s.ownerId === session.id;
+      const el = createPinElement(selected, owned, selected ? s.name : undefined);
       el.addEventListener("click", (e) => {
         e.stopPropagation();
         setSpot(s);
@@ -240,7 +250,7 @@ export default function MapView({ searchedLocation }: MapViewProps) {
       spotMarkersRef.current.forEach((marker) => marker.remove());
       spotMarkersRef.current = [];
     };
-  }, [mapReady, spotsFiltered, spot, showSpotDetailCard]);
+  }, [mapReady, spotsFiltered, spot, showSpotDetailCard, session]);
 
   // "You are here" marker + recenter — only when geolocation is granted and
   // no search is active (an active search already takes over the map
@@ -374,6 +384,7 @@ export default function MapView({ searchedLocation }: MapViewProps) {
         <div className={styles.overlayAnchor}>
           <SpotDetailCard
             spot={spot}
+            isOwner={session != null && spot.ownerId === session.id}
             onEdit={() => setShowEditSpotCard(true)}
             onDelete={() => setShowDeleteConfirm(true)}
           />
